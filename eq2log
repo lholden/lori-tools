@@ -38,9 +38,9 @@ class EQ2LogFilter
         next unless result = LINE.match(l)
         full, date, text = result.to_a
         
-        within_date_range(date, config['start'], config['finish']) do
+        within_date_range(date, config['start'], config['finish']) do |d|
           unless config['filters'].select {|r| (text =~ r) != nil}.empty?
-            puts "[#{date}] #{scrub(text)}"
+            puts "[#{d.strftime('%Y/%m/%d %H:%M:%S')}] #{scrub(text)}"
           end
         end
       end
