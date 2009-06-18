@@ -5,16 +5,16 @@
 #
 # == Usage
 #
-# eq2log [OPTION] ... CONFIG
+# eq2log [OPTION] ... CONFIG LOG
 #
 # CONFIG: YAML configuration file defining the rull set for parsing.
 #
+# LOG: Log file to parse
+#
 # == Example configuration:
 #   ---
-#   log: my_log.txt
-#   rules:
-#     - !ruby/regexp '/You tell Someone/i'
-#     - !ruby/regexp '/Someone:Someone/'
+#   - !ruby/regexp '/You tell Someone/i'
+#   - !ruby/regexp '/Someone:Someone/'
 # 
 
 require 'getoptlong'
@@ -27,16 +27,16 @@ class EQ2LogFilter
   }
   LINE = /^\(\d+\)\[(\w+ \w+ \d+ \d+:\d+:\d+ \d+)\] (.*)/
   
-  def run(file)
-    config = YAML.load_file(file)
+  def run(config, log)
+    rules = YAML.load_file(config)
     
-    File.open(config['log'], 'r') do |f|
+    File.open(log, 'r') do |f|
       f.each_line do |l|
         result = LINE.match(l)
         if result
           date = result[1]
           text = result[2]
-          unless config['rules'].select {|r| (text =~ r) != nil}.empty?
+          unless rules.select {|r| (text =~ r) != nil}.empty?
             puts "[#{date}] #{scrub(text)}"
           end
         end
@@ -66,10 +66,11 @@ opts.each do |opt, arg|
   end
 end
 
-
-if ARGV.length != 1
-  puts "Missing filter configuration argument (try --help)"
+if ARGV.length != 2
+  puts "Invalid number of arguments. (try --help)"
   exit 0
 end
 
-EQ2LogFilter.new.run(ARGV.shift)
+config = ARGV.shift
+log = ARGV.shift
+EQ2LogFilter.new.run(config, log)
