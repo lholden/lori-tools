@@ -1,0 +1,75 @@
+#!/usr/bin/env ruby
+# == Synopsis
+#
+# eq2log: parses an EQ2 log file
+#
+# == Usage
+#
+# eq2log [OPTION] ... CONFIG
+#
+# CONFIG: YAML configuration file defining the rull set for parsing.
+#
+# == Example configuration:
+#   ---
+#   log: my_log.txt
+#   rules:
+#     - !ruby/regexp '/You tell Someone/i'
+#     - !ruby/regexp '/Someone:Someone/'
+# 
+
+require 'getoptlong'
+require 'rdoc/usage'
+require 'yaml'
+
+class EQ2LogFilter
+  SCRUBBERS = {
+    /^\\aPC -1 (\S+):\S+\\\/a (.*)$/, proc {|line, person, action| "#{person} #{action}"}
+  }
+  LINE = /^\(\d+\)\[(\w+ \w+ \d+ \d+:\d+:\d+ \d+)\] (.*)/
+  
+  def run(file)
+    config = YAML.load_file(file)
+    
+    File.open(config['log'], 'r') do |f|
+      f.each_line do |l|
+        result = LINE.match(l)
+        if result
+          date = result[1]
+          text = result[2]
+          unless config['rules'].select {|r| (text =~ r) != nil}.empty?
+            puts "[#{date}] #{scrub(text)}"
+          end
+        end
+      end
+    end
+  end
+  private
+    def scrub(text)
+      result = SCRUBBERS.select {|r, t| (text =~ r) != nil}.first
+      if result
+        regex = result.first
+        transformer = result.last
+        text = transformer.call(*regex.match(text).to_a)
+      end
+
+      text
+    end
+end
+
+opts = GetoptLong.new(
+  [ '--help', '-h', GetoptLong::NO_ARGUMENT ]
+)
+opts.each do |opt, arg|
+  case opt
+  when '--help'
+    RDoc::usage
+  end
+end
+
+
+if ARGV.length != 1
+  puts "Missing filter configuration argument (try --help)"
+  exit 0
+end
+
+EQ2LogFilter.new.run(ARGV.shift)
