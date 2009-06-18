@@ -13,13 +13,18 @@
 #
 # == Example configuration:
 #   ---
-#   - !ruby/regexp '/You tell Someone/i'
-#   - !ruby/regexp '/Someone:Someone/'
+#   start: 2009-6-17 22:30:31
+#   end:   2009-6-17 22:33:06
+#   
+#   filters:
+#     - !ruby/regexp '/You tell Someone/i'
+#     - !ruby/regexp '/Someone:Someone/'
 # 
 
 require 'getoptlong'
 require 'rdoc/usage'
 require 'yaml'
+require 'date'
 
 class EQ2LogFilter
   SCRUBBERS = {
@@ -27,16 +32,14 @@ class EQ2LogFilter
   }
   LINE = /^\(\d+\)\[(\w+ \w+ \d+ \d+:\d+:\d+ \d+)\] (.*)/
   
-  def run(config, log)
-    rules = YAML.load_file(config)
-    
-    File.open(log, 'r') do |f|
+  def parse(config, log_file)
+    File.open(log_file, 'r') do |f|
       f.each_line do |l|
-        result = LINE.match(l)
-        if result
-          date = result[1]
-          text = result[2]
-          unless rules.select {|r| (text =~ r) != nil}.empty?
+        next unless result = LINE.match(l)
+        full, date, text = result.to_a
+        
+        within_date_range(date, config['start'], config['finish']) do
+          unless config['filters'].select {|r| (text =~ r) != nil}.empty?
             puts "[#{date}] #{scrub(text)}"
           end
         end
@@ -44,33 +47,41 @@ class EQ2LogFilter
     end
   end
   private
+    def within_date_range(date, start, finish)
+      date = DateTime.parse(date)
+      if start.nil? or date >= DateTime.parse(start)
+        if finish.nil? or date <= DateTime.parse(finish)
+          yield date
+        end
+      end
+    end
     def scrub(text)
       result = SCRUBBERS.select {|r, t| (text =~ r) != nil}.first
-      if result
-        regex = result.first
-        transformer = result.last
-        text = transformer.call(*regex.match(text).to_a)
-      end
-
-      text
+      return text unless result
+      
+      regex = result.first
+      transformer = result.last
+      
+      transformer.call(*regex.match(text).to_a)
     end
 end
 
-opts = GetoptLong.new(
-  [ '--help', '-h', GetoptLong::NO_ARGUMENT ]
-)
-opts.each do |opt, arg|
-  case opt
-  when '--help'
-    RDoc::usage
+if __FILE__ == $0
+  GetoptLong.new(
+    [ '--help', '-h', GetoptLong::NO_ARGUMENT ]
+  ).each do |opt, arg|
+    case opt
+    when '--help'
+      RDoc::usage
+    end
   end
-end
 
-if ARGV.length != 2
-  puts "Invalid number of arguments. (try --help)"
-  exit 0
-end
+  if ARGV.length != 2
+    puts "Invalid number of arguments. (try --help)"
+    exit 0
+  end
 
-config = ARGV.shift
-log = ARGV.shift
-EQ2LogFilter.new.run(config, log)
+  config = YAML.load_file(ARGV.shift)
+  
+  EQ2LogFilter.new.parse(config, *ARGV)
+end
